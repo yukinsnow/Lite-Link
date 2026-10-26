@@ -156,6 +156,7 @@ namespace NXInput_Server
                 Log(L("正在检查 GitHub 正式版…", "Checking the latest stable GitHub release..."));
                 var release = await ReleaseUpdater.Latest();
                 if (IsDisposed) return;
+                if (automatic && !autoUpdate.Checked) return;
                 if (ReleaseUpdater.NormalizeVersion(release.tag_name) <= GetType().Assembly.GetName().Version) {
                     Log(L("当前已是最新版本。", "Already up to date.")); return;
                 }
@@ -165,6 +166,7 @@ namespace NXInput_Server
                 Log(L("正在下载并校验更新…", "Downloading and verifying the update..."));
                 string staged = await ReleaseUpdater.Stage(release);
                 if (IsDisposed) return;
+                if (automatic && !autoUpdate.Checked) { Log(L("已关闭自动更新，未安装下载内容。", "Automatic updates disabled; downloaded files were not installed.")); return; }
                 SavePreferences();
                 ReleaseUpdater.LaunchInstaller(staged,Application.ExecutablePath);
                 exitingForUpdate = true; Application.Exit();

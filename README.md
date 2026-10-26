@@ -69,6 +69,8 @@ ZL/ZR are digital triggers. Gyro, touch-as-game-input and rumble are not impleme
 - **Switch:** remembers the last successful computer IP, button swaps, auto-connect and auto-update in `/switch/SwitchLiteController/settings.ini`. **Auto-connect on launch** tries the remembered computer first, then LAN discovery if it times out. Touch or press a button during the two-second startup delay to cancel. This means automatic connection when **Lite Link opens**, not launching homebrew when the Switch powers on.
 - Settings are saved with a temporary file and a backup/atomic replacement. Existing older Switch settings remain compatible. Failed writes keep the current session's settings and show an error.
 
+Windows allows only one receiver instance per login session, avoiding a duplicate app when login startup and manual launch overlap.
+
 ## GitHub Release updates
 
 Install **v0.3.0 manually once** to get the updater. Thereafter Windows and Switch check the latest non-draft, non-prerelease GitHub Release from this repository. Automatic installation is **off by default**.
