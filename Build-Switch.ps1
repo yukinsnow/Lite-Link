@@ -28,7 +28,7 @@ foreach ($source in Get-ChildItem -LiteralPath $sourceDirectory -Filter '*.c') {
 }
 & $gcc "-specs=$dkpRoot/libnx/switch.specs" -g -march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE @objectFiles "-L$dkpRoot/libnx/lib" "-L$dkpRoot/portlibs/switch/lib" -lcurl -lz -lnx -lm -o $elf
 if ($LASTEXITCODE -ne 0) { throw 'Linking failed' }
-& $nacptool --create 'Lite Link' 'Yukinsnow; Vins98; WerWolv' '0.3.0' $nacp
+& $nacptool --create 'Lite Link' 'Yukinsnow; Vins98; WerWolv' '0.3.1' $nacp
 if ($LASTEXITCODE -ne 0) { throw 'NACP creation failed' }
 & $elf2nro $elf $nro "--icon=$icon" "--nacp=$nacp"
 if ($LASTEXITCODE -ne 0) { throw 'NRO creation failed' }

@@ -54,7 +54,7 @@ namespace NXInput_Server
             using (var timeout = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(90)))
             using (var handler = new HttpClientHandler { AllowAutoRedirect = false })
             using (var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) }) {
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("Lite-Link/0.3.0");
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("Lite-Link/0.3.1");
                 for (int hop = 0; hop < 6; hop++) {
                     using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, timeout.Token)) {
                         int code = (int)response.StatusCode;

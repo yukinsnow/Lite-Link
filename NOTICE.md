@@ -1,6 +1,6 @@
 # Attribution
 
-Lite Link v0.3.0, maintained by GitHub @Yukinsnow.
+Lite Link v0.3.1, maintained by GitHub @Yukinsnow.
 
 This is a modified work derived from Vins98/NXInput (baseline commit `38791c3a227a2947fd2be481091f5a999a7941f1`), itself based on WerWolv/SwitchXBOXController. The original core Switch sender and Windows receiver are preserved and modified under the accompanying GPL-3.0 license.
 

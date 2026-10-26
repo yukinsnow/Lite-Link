@@ -100,7 +100,7 @@ namespace NXInput_Server
             this.Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath);
             this.MaximizeBox = false;
             this.Name = "Form1";
-            this.Text = "Lite Link 0.3.0";
+            this.Text = "Lite Link 0.3.1";
             this.Load += new System.EventHandler(this.Form1_Load);
             this.ResumeLayout(false);
             this.PerformLayout();

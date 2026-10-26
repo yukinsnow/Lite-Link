@@ -32,7 +32,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 #---------------------------------------------------------------------------------
 APP_TITLE := Lite Link
 APP_AUTHOR := Yukinsnow, Vins98, WerWolv
-APP_VERSION := 0.3.0
+APP_VERSION := 0.3.1
 
 TARGET		:=	$(notdir $(CURDIR))
 BUILD		:=	build
