@@ -80,7 +80,9 @@ Install **v0.3.0 manually once** to get the updater. Thereafter Windows and Swit
 - Releases must include `Lite-Link-vX.Y.Z-Windows.zip` (with the three files under `Windows/`), `Lite-Link-vX.Y.Z-Switch.nro`, and matching `SHA256SUMS.txt` entries. Checksums protect integrity; the GitHub repository/release publisher remains the trust source. There is no signing-key authentication beyond verified HTTPS.
 - macOS stays experimental and does **not** yet have these startup/update controls. It still requires Apple's restricted virtual HID authorization.
 
-Updater tests cover metadata/version parsing, corrupted checksums, exact-path extraction, settings persistence, legacy settings and backup recovery; Windows also passed a real GitHub release check. Actual in-place restart and Switch HTTPS/NRO replacement still need device verification. Startup and automatic-update options are never enabled by the build or installer.
+If Switch update checks report an HTTPS certificate error such as `SSL CA cert or SSH remote key was not OK`, first check the **year, date and time in Switch System Settings**. An incorrect system clock can cause certificate validation to fail. The reported issue was resolved by correcting the console's clock; no app modification or disabling of certificate verification was needed.
+
+Updater tests cover metadata/version parsing, corrupted checksums, exact-path extraction, settings persistence, legacy settings and backup recovery. The user confirmed that Windows updated successfully and Switch update checks worked after correcting the console's clock; Switch HTTPS/NRO replacement still needs device verification. Startup and automatic-update options are never enabled by the build or installer.
 
 ## Build
 
