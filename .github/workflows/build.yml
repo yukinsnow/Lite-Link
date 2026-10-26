@@ -1,0 +1,55 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build Windows receiver
+        run: msbuild "Windows_Server/NXInput Server.sln" /p:Configuration=Release /verbosity:minimal
+      - name: Test UDP protocol and reconnect
+        shell: pwsh
+        run: |
+          $dir = Resolve-Path "Windows_Server/NXInput Server/bin/Release"
+          $compiler = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -find 'MSBuild\**\Roslyn\csc.exe' | Select-Object -First 1
+          if (!$compiler) { throw 'Roslyn compiler unavailable' }
+          $facade = "${env:ProgramFiles(x86)}/Reference Assemblies/Microsoft/Framework/.NETFramework/v4.8/Facades/netstandard.dll"
+          & $compiler /nologo /target:exe "/out:$dir/ProtocolSmoke.exe" "/reference:$dir/NXInput Server.exe" "/reference:$dir/Nefarius.ViGEm.Client.dll" /reference:System.Windows.Forms.dll "/reference:$facade" validation/ProtocolSmoke.cs
+          if ($LASTEXITCODE) { throw 'Test build failed' }
+          & "$dir/ProtocolSmoke.exe"
+          if ($LASTEXITCODE) { throw 'Protocol tests failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lite-Link-Windows
+          path: |
+            Windows_Server/NXInput Server/bin/Release/*.exe
+            Windows_Server/NXInput Server/bin/Release/*.dll
+            Windows_Server/NXInput Server/bin/Release/*.config
+  switch:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile Switch app
+        working-directory: Switch_Client
+        run: make -j2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lite-Link-Switch
+          path: Switch_Client/Switch_Client.nro
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test native HID receiver
+        run: bash macOS/build-app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Lite-Link-macOS-experimental
+          path: macOS/dist/Lite-Link-macOS-experimental.zip

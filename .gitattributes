@@ -1,0 +1,13 @@
+* text=auto
+*.c text eol=lf
+*.h text eol=lf
+*.swift text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.sh text eol=lf
+Makefile text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.nupkg binary
+*.dll binary
