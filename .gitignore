@@ -14,6 +14,9 @@ build-switch/
 *.user
 *.suo
 settings.ini
+settings.ini.bak
+*.nro.bak
+*.nro.new
 *.tmp
 *.p12
 *.mobileprovision

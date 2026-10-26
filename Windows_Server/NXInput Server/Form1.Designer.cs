@@ -77,7 +77,7 @@ namespace NXInput_Server
             //
             // richTextBox1
             //
-            this.richTextBox1.Location = new System.Drawing.Point(15, 180);
+            this.richTextBox1.Location = new System.Drawing.Point(15, 286);
             this.richTextBox1.Name = "richTextBox1";
             this.richTextBox1.ScrollBars = System.Windows.Forms.RichTextBoxScrollBars.ForcedVertical;
             this.richTextBox1.Size = new System.Drawing.Size(720, 185);
@@ -89,7 +89,7 @@ namespace NXInput_Server
             //
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(750, 380);
+            this.ClientSize = new System.Drawing.Size(750, 490);
             this.Controls.Add(this.adapterComboBox);
             this.Controls.Add(this.refreshButton);
             this.Controls.Add(this.richTextBox1);
@@ -100,7 +100,7 @@ namespace NXInput_Server
             this.Icon = System.Drawing.Icon.ExtractAssociatedIcon(System.Windows.Forms.Application.ExecutablePath);
             this.MaximizeBox = false;
             this.Name = "Form1";
-            this.Text = "Lite Link 0.2.0";
+            this.Text = "Lite Link 0.3.0";
             this.Load += new System.EventHandler(this.Form1_Load);
             this.ResumeLayout(false);
             this.PerformLayout();

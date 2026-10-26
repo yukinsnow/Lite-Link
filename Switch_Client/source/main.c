@@ -12,6 +12,8 @@
 #include "network_config.h"
 #include "mapping.h"
 #include "ui.h"
+#include "update.h"
+#include "preferences.h"
 
 #define PORT 8192
 #define DISCOVERY_PORT 8193
@@ -27,6 +29,9 @@ static bool discovering;
 static uint64_t deadline,lastQuery,lastDraw,lastActivity;
 static uint64_t suppressedButtons;
 static uint32_t localAddress,localMask,broadcastAddress;
+static ReleaseInfo pendingRelease;
+static char selfPath[1024];
+static bool requestedExit, automaticFallback, updateCancelled;
 
 static uint64_t nowMs(void) { return armTicksToNs(armGetSystemTick())/1000000; }
 static void note(const char *value) { snprintf(ui.note,sizeof(ui.note),"%s",value); }
@@ -41,27 +46,15 @@ static bool validPc(const char *value,struct in_addr *out) {
 }
 static void saveSettings(void) {
     mkdir(SETTINGS_DIR,0777);
-    FILE *file=fopen(SETTINGS_PATH ".tmp","w");
-    if(!file) { note(tr("设置已应用，但 SD 卡写入失败，未能保存。","Settings applied, but could not write to the SD card.")); return; }
-    int written=fprintf(file,"swap_ab=%d\nswap_xy=%d\npc=%s\n",ui.swapAB,ui.swapXY,ui.pc);
-    int closed=fclose(file);
-    if(written<0 || closed || rename(SETTINGS_PATH ".tmp",SETTINGS_PATH)) note(tr("设置已应用，但文件保存失败。","Settings applied, but could not save the file."));
+    LitePreferences settings={.swapAB=ui.swapAB,.swapXY=ui.swapXY,.autoConnect=ui.autoConnect,.autoUpdate=ui.autoUpdate};
+    strcpy(settings.pc,ui.pc);
+    if(!preferencesSave(SETTINGS_PATH,&settings)) note(tr("设置已应用，但 SD 卡保存失败。","Settings applied, but could not save to the SD card."));
 }
 static void loadSettings(void) {
-    FILE *file=fopen(SETTINGS_PATH,"r");
-    if(!file) return;
-    char line[96];
-    while(fgets(line,sizeof(line),file)) {
-        int value;
-        if(sscanf(line,"swap_ab=%d",&value)==1) ui.swapAB=value!=0;
-        if(sscanf(line,"swap_xy=%d",&value)==1) ui.swapXY=value!=0;
-        if(strncmp(line,"pc=",3)==0) {
-            line[strcspn(line,"\r\n")]=0;
-            struct in_addr address;
-            if(validPc(line+3,&address)) snprintf(ui.pc,sizeof(ui.pc),"%.15s",line+3);
-        }
-    }
-    fclose(file);
+    LitePreferences settings;
+    if(!preferencesLoad(SETTINGS_PATH,&settings)) return;
+    ui.swapAB=settings.swapAB;ui.swapXY=settings.swapXY;ui.autoConnect=settings.autoConnect;ui.autoUpdate=settings.autoUpdate;
+    strcpy(ui.pc,settings.pc);
 }
 static void refreshNetwork(void) {
     if(!nifmReady) nifmReady=R_SUCCEEDED(nifmInitialize(NifmServiceType_User));
@@ -124,6 +117,7 @@ static void disconnect(void) {
     if(ui.connected && connectionSocket>=0) sendInput(0,0,0,0,0);
     if(connectionSocket>=0) close(connectionSocket);
     connectionSocket=-1; ui.connected=false; ui.busy=false; ui.held=0;
+    automaticFallback=false;
     ui.focus=UI_SEARCH;
     ui.lx=ui.ly=ui.rx=ui.ry=0;
     note(tr("已断开。可以重新连接；旧版电脑接收端需先停止再启动。","Disconnected. Reconnect anytime; older receivers may need a restart."));
@@ -150,7 +144,11 @@ static void beginConnection(bool automatic) {
 static void pollConnection(void) {
     if(!ui.busy) return;
     uint64_t now=nowMs();
-    if(now>=deadline) { disconnect(); note(tr("连接超时：检查电脑网卡和防火墙，或改用手动 IP。","Connection timed out. Check the adapter/firewall, or use a manual IP.")); return; }
+    if(now>=deadline) {
+        bool fallback=automaticFallback;disconnect();
+        if(fallback) { beginConnection(true); return; }
+        note(tr("连接超时：检查电脑网卡和防火墙，或改用手动 IP。","Connection timed out. Check the adapter/firewall, or use a manual IP.")); return;
+    }
     if(!lastQuery || now-lastQuery>=250) {
         const char query[]="xbox_switch";
         if(sendto(connectionSocket,query,sizeof(query),0,(struct sockaddr *)&target,sizeof(target))<0 && errno!=EWOULDBLOCK && errno!=EAGAIN) {
@@ -190,6 +188,41 @@ static void manualKeyboard(void) {
         strcpy(ui.pc,value); beginConnection(false);
     }
 }
+static int updateProgress(size_t done,size_t total,void *unused) {
+    (void)unused;
+    if(!appletMainLoop()) { updateCancelled=true;return 1; }
+    padUpdate(&pad);
+    if(padGetButtonsDown(&pad)&HidNpadButton_B) {updateCancelled=true;return 1;}
+    if(nowMs()-lastDraw>150) {
+        if(total) snprintf(ui.note,sizeof(ui.note),tr("更新传输：%u%% · B 取消","Update transfer: %u%% · B cancels"),(unsigned)(done*100/total));
+        draw();
+    }
+    return 0;
+}
+static void performUpdate(bool automatic) {
+    if(ui.connected || ui.busy) {note(tr("请先断开连接再更新，避免中断游戏。","Disconnect before updating to avoid interrupting a game."));return;}
+    bool install=ui.updateAvailable;
+    ui.busy=true;updateCancelled=false;
+    note(tr("正在检查 GitHub 正式版… B 取消。","Checking the latest stable GitHub release... B cancels."));draw();
+    char error[128]={0};
+    if(!install && !switchUpdateCheck(&pendingRelease,updateProgress,NULL,error,sizeof(error))) goto failed;
+    if(!releaseNewer(pendingRelease.tag,LITE_LINK_VERSION)) {
+        ui.updateAvailable=false;ui.busy=false;note(tr("已是最新版本。","Already up to date."));return;
+    }
+    ui.updateAvailable=true;
+    if(!automatic && !install) {
+        ui.busy=false;
+        snprintf(ui.note,sizeof(ui.note),tr("发现 %s。再次点击“安装更新”下载、校验并替换。","Found %s. Tap Install update to download, verify and replace."),pendingRelease.tag);return;
+    }
+    note(tr("正在下载并校验 NRO… B 取消。","Downloading and verifying the NRO... B cancels."));draw();
+    if(!switchUpdateInstall(&pendingRelease,selfPath,updateProgress,NULL,error,sizeof(error))) goto failed;
+    saveSettings();ui.busy=false;requestedExit=true;
+    note(tr("更新已安装。返回菜单后请重新打开 Lite Link。","Update installed. Reopen Lite Link after returning to the menu."));draw();svcSleepThread(2000000000);return;
+failed:
+    ui.busy=false;
+    if(updateCancelled) note(tr("更新已取消，当前版本保留。","Update cancelled. Current version kept."));
+    else snprintf(ui.note,sizeof(ui.note),tr("更新失败（保留当前版本）：%s","Update failed (current version kept): %s"),error);
+}
 static void action(int which) {
     if(ui.busy) return;
     if(which==UI_SEARCH) { if(ui.connected) disconnect(); else beginConnection(true); }
@@ -198,9 +231,15 @@ static void action(int which) {
     if(which==UI_SWAP_AB) { ui.swapAB=!ui.swapAB; note(ui.swapAB?tr("A/B 交换已开启：Switch A 对应 Xbox A。","A/B swap on: Switch A maps to Xbox A."):tr("A/B 交换已关闭：按物理位置对应 Xbox 按钮。","A/B swap off: match the Xbox button positions.")); saveSettings(); }
     if(which==UI_SWAP_XY) { ui.swapXY=!ui.swapXY; note(ui.swapXY?tr("X/Y 交换已开启：Switch X 对应 Xbox X。","X/Y swap on: Switch X maps to Xbox X."):tr("X/Y 交换已关闭：按物理位置对应 Xbox 按钮。","X/Y swap off: match the Xbox button positions.")); saveSettings(); }
     if(which==UI_SCREEN) setScreenOff(!ui.screenOff);
+    if(which==UI_AUTO_CONNECT) {
+        ui.autoConnect=!ui.autoConnect;
+        note(tr("自动连接设置已保存；下次打开将优先连接上次电脑。","Auto-connect saved. Next launch will try the last computer first.")); saveSettings();
+    }
+    if(which==UI_AUTO_UPDATE) {ui.autoUpdate=!ui.autoUpdate;note(tr("自动更新设置已保存，下次打开时生效。","Auto-update saved. It takes effect on the next launch."));saveSettings();}
+    if(which==UI_UPDATE) performUpdate(false);
 }
 int main(int argc,char **argv) {
-    (void)argc; (void)argv;
+    if(argc>0 && argv[0]) snprintf(selfPath,sizeof(selfPath),"%s",argv[0]);
     if(R_SUCCEEDED(setInitialize())) {
         u64 languageCode=0; SetLanguage language=SetLanguage_ENUS;
         if(R_SUCCEEDED(setGetSystemLanguage(&languageCode)) && R_SUCCEEDED(setMakeLanguage(languageCode,&language)))
@@ -234,13 +273,31 @@ int main(int argc,char **argv) {
     AppletHookCookie hook; appletHook(&hook,focusHook,NULL);
     refreshNetwork();
     if(!socketReady) note(tr("网络服务初始化失败，请退出后重新运行程序。","Network initialization failed. Exit and launch the app again."));
-    bool previousTouch=false;
-    while(appletMainLoop()) {
+    uint64_t automaticAt=nowMs()+2000;
+    bool automaticPending=socketReady && ui.autoConnect;
+    bool updatePending=socketReady && ui.autoUpdate;
+    bool previousTouch=false,firstFrame=true,launchTouchHeld=false;
+    uint64_t launchHeld=0;
+    while(!requestedExit && appletMainLoop()) {
         padUpdate(&pad);
         uint64_t held=padGetButtons(&pad),down=padGetButtonsDown(&pad);
         bool wasConnected=ui.connected;
         HidTouchScreenState touch={0}; hidGetTouchScreenStates(&touch,1);
         bool touched=touch.count>0;
+        if(firstFrame) {launchHeld=held;launchTouchHeld=touched;firstFrame=false;}
+        launchHeld&=held;down&=~launchHeld;
+        if(!touched) launchTouchHeld=false;
+        if((automaticPending || updatePending) && ((touched && !previousTouch && !launchTouchHeld) || down)) { automaticPending=false;updatePending=false;note(tr("已取消本次自动启动操作。","Automatic launch actions cancelled for this session.")); }
+        if(updatePending && nowMs()>=automaticAt) {
+            updatePending=false;performUpdate(true);
+            if(requestedExit) break;
+            if(updateCancelled) automaticPending=false;
+        }
+        if(automaticPending && nowMs()>=automaticAt) {
+            automaticPending=false;
+            if(ui.pc[0]) beginConnection(false); else beginConnection(true);
+            automaticFallback=ui.pc[0]!=0 && ui.busy;
+        }
         bool woke=false;
         if(ui.screenOff && touched && !previousTouch) { setScreenOff(false); woke=true; }
         const uint64_t screenChord=HidNpadButton_L|HidNpadButton_R|HidNpadButton_Minus;
@@ -250,7 +307,7 @@ int main(int argc,char **argv) {
         if((held&(HidNpadButton_Plus|HidNpadButton_Minus))==(HidNpadButton_Plus|HidNpadButton_Minus)) break;
         if(!wasConnected && !ui.busy && (down&HidNpadButton_Plus)) break;
         if(ui.busy && (down&HidNpadButton_B)) { disconnect(); note(tr("已取消连接。","Connection cancelled.")); }
-        if(!woke && touched && !previousTouch && !ui.screenOff) {
+        if(!woke && touched && !previousTouch && !launchTouchHeld && !ui.screenOff) {
             int hit=uiHitTest(touch.touches[0].x,touch.touches[0].y);
             if(hit>=0 && socketReady) { ui.focus=wasConnected?-1:hit; action(hit); }
         }

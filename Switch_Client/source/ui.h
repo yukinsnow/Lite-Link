@@ -2,9 +2,9 @@
 #define LITE_UI_H
 #include <stdint.h>
 #include <stdbool.h>
-enum { UI_SEARCH, UI_MANUAL, UI_REFRESH, UI_SWAP_AB, UI_SWAP_XY, UI_SCREEN, UI_ACTION_COUNT };
+enum { UI_SEARCH, UI_MANUAL, UI_REFRESH, UI_SWAP_AB, UI_SWAP_XY, UI_SCREEN, UI_AUTO_CONNECT, UI_UPDATE, UI_AUTO_UPDATE, UI_ACTION_COUNT };
 typedef struct {
-    bool connected, networkValid, swapAB, swapXY, screenOff, backlightAvailable, busy;
+    bool connected, networkValid, swapAB, swapXY, screenOff, backlightAvailable, busy, autoConnect, autoUpdate, updateAvailable;
     int focus;
     uint64_t held;
     int lx, ly, rx, ry;

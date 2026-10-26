@@ -1,5 +1,6 @@
 #include "i18n.h"
 #include "ui.h"
+#include "release_info.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,7 +12,8 @@ bool gChinese=false;
 typedef struct { int x,y,w,h; } Rect;
 static const Rect actions[UI_ACTION_COUNT] = {
     {604,236,282,58}, {906,236,306,58}, {438,150,94,42},
-    {40,458,384,122}, {448,458,384,122}, {856,458,384,122}
+    {40,458,384,122}, {448,458,384,122}, {856,458,384,122},
+    {856,600,384,44}, {720,82,220,36}, {448,600,384,44}
 };
 static stbtt_fontinfo fonts[2];
 static bool fontReady[2];
@@ -132,8 +134,12 @@ void uiRender(uint32_t *pixels,int width,int height,int stridePixels,const UiSta
     buffer=pixels; screenWidth=width;screenHeight=height;stride=stridePixels;
     for(int y=0;y<height;y++) rect(0,y,width,1,rgb(10+y*3/height,18+y*5/height,31+y*8/height));
     text(40,28,43,WHITE,"LITE / LINK",500);
-    text(42,83,22,MUTED,tr("把 Switch Lite 变成无线手柄","Your Switch Lite. A wireless controller."),600);
+    text(42,83,17,TEAL,s->note,630);
     text(1008,94,18,MUTED,"GitHub @Yukinsnow",232);
+    Rect update=actions[UI_UPDATE];
+    if(s->focus==UI_UPDATE) { Rect border={update.x-2,update.y-2,update.w+4,update.h+4};roundRect(border,14,TEAL); }
+    roundRect(update,12,rgb(28,46,62));
+    text(update.x+14,update.y+6,19,MUTED,s->updateAvailable?tr("安装更新","Install update"):tr("检查更新","Check for updates"),200);
     Rect badge={1010,43,230,48}; roundRect(badge,24,rgb(24,45,54));
     circle(1036,67,6,s->connected?TEAL:rgb(239,180,95));
     text(1054,51,24,WHITE,s->connected?tr("正在传送输入","Sending input"):tr("等待连接","Not connected"),170);
@@ -164,7 +170,21 @@ void uiRender(uint32_t *pixels,int width,int height,int stridePixels,const UiSta
     toggle(UI_SWAP_AB,s,tr("A / B 交换","Swap A / B"),s->swapAB?"Switch A → Xbox A":"Switch A → Xbox B",s->swapAB,true);
     toggle(UI_SWAP_XY,s,tr("X / Y 交换","Swap X / Y"),s->swapXY?"Switch X → Xbox X":"Switch X → Xbox Y",s->swapXY,true);
     toggle(UI_SCREEN,s,tr("关闭屏幕背光","Turn screen off"),s->backlightAvailable?tr("熄屏后，触摸任意位置唤醒","Tap anywhere to wake"):tr("背光服务不可用","Backlight service unavailable"),s->screenOff,s->backlightAvailable && s->connected);
-    text(42,603,22,TEAL,s->note,1180);
+    Rect automatic=actions[UI_AUTO_CONNECT];
+    if(s->focus==UI_AUTO_CONNECT) { Rect border={automatic.x-2,automatic.y-2,automatic.w+4,automatic.h+4}; roundRect(border,15,TEAL); }
+    roundRect(automatic,13,rgb(23,37,53));
+    text(automatic.x+16,automatic.y+9,20,WHITE,tr("打开后自动连接","Auto-connect on launch"),270);
+    Rect track={automatic.x+304,automatic.y+10,60,26};
+    roundRect(track,13,s->autoConnect?TEAL:rgb(65,78,92));
+    circle(track.x+(s->autoConnect?47:13),track.y+13,9,WHITE);
+    Rect autoUpdate=actions[UI_AUTO_UPDATE];
+    if(s->focus==UI_AUTO_UPDATE) { Rect border={autoUpdate.x-2,autoUpdate.y-2,autoUpdate.w+4,autoUpdate.h+4}; roundRect(border,15,TEAL); }
+    roundRect(autoUpdate,13,rgb(23,37,53));
+    text(autoUpdate.x+16,autoUpdate.y+9,20,WHITE,tr("打开后自动更新","Update on launch"),270);
+    track=(Rect){autoUpdate.x+304,autoUpdate.y+10,60,26};
+    roundRect(track,13,s->autoUpdate?TEAL:rgb(65,78,92));
+    circle(track.x+(s->autoUpdate?47:13),track.y+13,9,WHITE);
+    text(42,610,19,MUTED,"LITE LINK  " LITE_LINK_VERSION,380);
     rect(40,652,1200,1,rgb(40,54,68));
     text(42,667,19,MUTED,s->connected?tr("触摸修改设置   ·   L + R + 减号：熄屏 / 唤醒   ·   加号 + 减号：退出","Touch to change settings  ·  L + R + Minus: screen  ·  Plus + Minus: exit"):tr("方向键选择 / A 确认   ·   X 自动搜索   ·   Y 刷新网络   ·   加号退出","D-pad: select  /  A: confirm  ·  X: find computer  ·  Y: refresh  ·  Plus: exit"),1180);
 }

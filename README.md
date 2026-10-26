@@ -63,9 +63,26 @@ Screen-off only changes the backlight; the power button still suspends the syste
 
 ZL/ZR are digital triggers. Gyro, touch-as-game-input and rumble are not implemented. The on-screen indicators show local input, not acknowledgment from the computer.
 
+## Startup and remembered settings
+
+- **Windows:** remembers the selected adapter ID/IPv4 and last Switch IP in `%APPDATA%/LiteLink/settings.xml`. Enable **Launch Lite Link when I sign in to Windows** for current-user login startup (no administrator required). Enable **Start receiving when the app opens** to start the server using the remembered adapter. These are separate options and default off. If DHCP changes its address, the same adapter is restored only when its IPv4 choice is unambiguous; an unavailable saved adapter is never replaced by a different adapter automatically. Startup waits up to 60 seconds for it to appear.
+- **Switch:** remembers the last successful computer IP, button swaps, auto-connect and auto-update in `/switch/SwitchLiteController/settings.ini`. **Auto-connect on launch** tries the remembered computer first, then LAN discovery if it times out. Touch or press a button during the two-second startup delay to cancel. This means automatic connection when **Lite Link opens**, not launching homebrew when the Switch powers on.
+- Settings are saved with a temporary file and a backup/atomic replacement. Existing older Switch settings remain compatible. Failed writes keep the current session's settings and show an error.
+
+## GitHub Release updates
+
+Install **v0.3.0 manually once** to get the updater. Thereafter Windows and Switch check the latest non-draft, non-prerelease GitHub Release from this repository. Automatic installation is **off by default**.
+
+- **Windows:** use **Check updates** to check manually and confirm installation, or enable **Install stable updates on launch**. Checking is allowed while receiving, but installation requires the receiver to be stopped. Downloads use HTTPS/TLS 1.2 and the release's `SHA256SUMS.txt`; only the exact three receiver payload files are extracted. A local helper waits for this app to exit, backs up/replaces files in the same folder and restarts it. Copy/launch failures attempt rollback; preferences and login startup remain in place. Keep the executable at its registered location.
+- **Switch:** tap **Check for updates**, then **Install update** to confirm; or enable **Update on launch**. Disconnect first. The app downloads the raw versioned `.nro` over verified HTTPS, checks SHA-256 and NRO headers, stages it on the SD card, keeps the previous `.nro.bak`, and exits to the menu. Reopen Lite Link to run the new version. B cancels network transfers before installation. Unknown executable paths or write failures refuse installation. Screen-off state is not restored after updates.
+- Releases must include `Lite-Link-vX.Y.Z-Windows.zip` (with the three files under `Windows/`), `Lite-Link-vX.Y.Z-Switch.nro`, and matching `SHA256SUMS.txt` entries. Checksums protect integrity; the GitHub repository/release publisher remains the trust source. There is no signing-key authentication beyond verified HTTPS.
+- macOS stays experimental and does **not** yet have these startup/update controls. It still requires Apple's restricted virtual HID authorization.
+
+Updater tests cover metadata/version parsing, corrupted checksums, exact-path extraction, settings persistence, legacy settings and backup recovery; Windows also passed a real GitHub release check. Actual in-place restart and Switch HTTPS/NRO replacement still need device verification. Startup and automatic-update options are never enabled by the build or installer.
+
 ## Build
 
-- **Switch:** install devkitPro `switch-dev`, then `cd Switch_Client && make`. On Windows, `Build-Switch.ps1 -DevkitPro <toolchain-root>` also works.
+- **Switch:** install devkitPro `switch-dev`, `switch-curl` and `switch-zlib`, then `cd Switch_Client && make`. On Windows, `Build-Switch.ps1 -DevkitPro <toolchain-root>` also works.
 - **Windows:** Visual Studio with .NET desktop development and .NET Framework 4.8 targeting pack; build `Windows_Server/NXInput Server.sln` in Release.
 - **macOS:** Xcode / Swift 6 and macOS 15 SDK; `bash macOS/build-app.sh`. The default app is an ad-hoc-signed diagnostic build without the restricted entitlement. See [signing requirements](docs/macOS.md).
 

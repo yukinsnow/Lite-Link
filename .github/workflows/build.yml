@@ -20,8 +20,8 @@ jobs:
           $compiler = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -find 'MSBuild\**\Roslyn\csc.exe' | Select-Object -First 1
           if (!$compiler) { throw 'Roslyn compiler unavailable' }
           $facade = "${env:ProgramFiles(x86)}/Reference Assemblies/Microsoft/Framework/.NETFramework/v4.8/Facades/netstandard.dll"
-          foreach ($testName in 'ProtocolSmoke','LanguageSmoke') {
-            & $compiler /nologo /target:exe "/out:$dir/$testName.exe" "/reference:$dir/NXInput Server.exe" "/reference:$dir/Nefarius.ViGEm.Client.dll" /reference:System.Windows.Forms.dll "/reference:$facade" "validation/$testName.cs"
+          foreach ($testName in 'ProtocolSmoke','LanguageSmoke','SettingsUpdateSmoke') {
+            & $compiler /nologo /target:exe "/out:$dir/$testName.exe" "/reference:$dir/NXInput Server.exe" "/reference:$dir/Nefarius.ViGEm.Client.dll" /reference:System.Windows.Forms.dll /reference:System.IO.Compression.dll /reference:System.IO.Compression.FileSystem.dll "/reference:$facade" "validation/$testName.cs"
             if ($LASTEXITCODE) { throw 'Test build failed' }
             & "$dir/$testName.exe"
             if ($LASTEXITCODE) { throw 'Tests failed' }
@@ -40,7 +40,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile Switch app
         working-directory: Switch_Client
-        run: make -j2
+        run: |
+          if [ ! -f /opt/devkitpro/portlibs/switch/lib/libcurl.a ]; then
+            dkp-pacman -S --noconfirm --needed switch-curl switch-zlib
+          fi
+          make -j2
       - uses: actions/upload-artifact@v4
         with:
           name: Lite-Link-Switch
@@ -55,3 +59,13 @@ jobs:
         with:
           name: Lite-Link-macOS-experimental
           path: macOS/dist/Lite-Link-macOS-experimental.zip
+  preferences-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Switch preferences and release metadata
+        run: |
+          cc -std=c11 -Wall -I Switch_Client/source validation/PreferencesUpdateSmoke.c Switch_Client/source/preferences.c Switch_Client/source/release_info.c -o /tmp/lite-pref-check
+          mkdir -p "$RUNNER_TEMP/lite-preferences"
+          /tmp/lite-pref-check "$RUNNER_TEMP/lite-preferences"
+          cc -I Switch_Client/source -c validation/network-config-check.c -o /tmp/network-config-check.o

@@ -28,6 +28,18 @@ namespace NXInput_Server
         private static IPEndPoint clientEndPoint;
 
         private bool _serverRunning;
+        private ReceiverPreferences preferences = new ReceiverPreferences();
+        private bool preferencesReady;
+        private readonly string preferencesPath = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LiteLink", "settings.xml");
+        private readonly CheckBox launchAtLogin = new CheckBox();
+        private readonly CheckBox autoReceive = new CheckBox();
+        private readonly CheckBox autoUpdate = new CheckBox();
+        private readonly Button checkUpdate = new Button();
+        private bool updateBusy, exitingForUpdate;
+        private readonly System.Windows.Forms.Timer startupRetry = new System.Windows.Forms.Timer();
+        private int retryCount;
+        private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
         private sealed class AdapterAddress
         {
@@ -57,12 +69,107 @@ namespace NXInput_Server
                 Location = new System.Drawing.Point(15, 145) };
             credit.LinkClicked += (sender,args) => System.Diagnostics.Process.Start("https://github.com/Yukinsnow");
             Controls.Add(credit);
-            FormClosing += (sender, args) => StopServer();
+            launchAtLogin.Text = L("登录 Windows 后自动启动 Lite Link", "Launch Lite Link when I sign in to Windows");
+            launchAtLogin.Location = new System.Drawing.Point(15, 180); launchAtLogin.AutoSize = true;
+            autoReceive.Text = L("打开应用后自动接收（使用记忆的网卡）", "Start receiving when the app opens (remembered adapter)");
+            autoReceive.Location = new System.Drawing.Point(15, 212); autoReceive.AutoSize = true;
+            Controls.Add(launchAtLogin); Controls.Add(autoReceive);
+            autoUpdate.Text = L("打开时自动检查并安装正式版更新（空闲时重启）", "Install stable updates on launch (restarts when idle)");
+            autoUpdate.Location = new System.Drawing.Point(15,244); autoUpdate.AutoSize = true;
+            checkUpdate.Location = new System.Drawing.Point(623,240); checkUpdate.Size = new System.Drawing.Size(112,28);
+            checkUpdate.Text = L("检查更新", "Check updates");
+            checkUpdate.Click += async (sender,args) => await CheckForUpdates(false);
+            autoUpdate.CheckedChanged += (sender,args) => { if (preferencesReady) SavePreferences(); };
+            Controls.Add(autoUpdate); Controls.Add(checkUpdate);
+            launchAtLogin.CheckedChanged += (sender,args) => {
+                if (!preferencesReady) return;
+                try {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunKey)) {
+                        if (launchAtLogin.Checked) key.SetValue("LiteLink", ReceiverPreferences.StartupCommand(Application.ExecutablePath));
+                        else key.DeleteValue("LiteLink", false);
+                    }
+                } catch (Exception ex) { Log(L("自启动设置失败：", "Startup setting failed: ") + ex.Message);
+                    preferencesReady = false; launchAtLogin.Checked = !launchAtLogin.Checked; preferencesReady = true; }
+            };
+            autoReceive.CheckedChanged += (sender,args) => {
+                if (!preferencesReady) return;
+                preferences.AutoReceive = autoReceive.Checked; SavePreferences();
+                if (!autoReceive.Checked) startupRetry.Stop();
+            };
+            startupRetry.Interval = 2000;
+            startupRetry.Tick += (sender,args) => {
+                if (updateBusy) return;
+                RefreshNetworkAdapters();
+                if (adapterComboBox.SelectedItem != null) { startupRetry.Stop(); StartServer(); }
+                else if (++retryCount >= 30) { startupRetry.Stop(); Log(L("记忆的网卡未上线，请手动选择。", "Remembered adapter unavailable; select it manually.")); }
+            };
+            FormClosing += (sender, args) => { startupRetry.Stop(); SavePreferences(); StopServer(); };
+            Disposed += (sender,args) => startupRetry.Dispose();
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            preferences = ReceiverPreferences.Load(preferencesPath);
+            autoReceive.Checked = preferences.AutoReceive;
+            autoUpdate.Checked = preferences.AutoUpdate;
+            try { using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunKey))
+                launchAtLogin.Checked = string.Equals(key?.GetValue("LiteLink") as string,
+                    ReceiverPreferences.StartupCommand(Application.ExecutablePath), StringComparison.OrdinalIgnoreCase); }
+            catch (Exception ex) { Log(ex.Message); }
             RefreshNetworkAdapters();
+            preferencesReady = true;
+            if (!string.IsNullOrEmpty(preferences.LastSwitchIp)) Log(L("上次连接的 Switch：", "Last Switch: ") + preferences.LastSwitchIp);
+            BeginInvoke(new Action(async () => {
+                bool failedUpdate = Environment.GetCommandLineArgs().Contains("--update-failed");
+                if (failedUpdate) Log(L("上次更新失败，本次不自动重试。日志：%LOCALAPPDATA%/LiteLink/Updates", "Previous update failed; automatic retry skipped. Logs: %LOCALAPPDATA%/LiteLink/Updates"));
+                if (preferences.AutoUpdate && !failedUpdate) await CheckForUpdates(true);
+                if (IsDisposed || exitingForUpdate) return;
+                if (preferences.AutoReceive) {
+                    if (adapterComboBox.SelectedItem != null) StartServer();
+                    else { retryCount = 0; startupRetry.Start(); Log(L("等待记忆的网卡上线…", "Waiting for the remembered adapter...")); }
+                }
+            }));
+        }
+
+        private void SavePreferences()
+        {
+            if (!preferencesReady) return;
+            var selected = adapterComboBox.SelectedItem as AdapterAddress;
+            if (selected != null) { preferences.AdapterId = selected.Id; preferences.Address = selected.Address.ToString(); }
+            preferences.AutoReceive = autoReceive.Checked;
+            preferences.AutoUpdate = autoUpdate.Checked;
+            try { preferences.Save(preferencesPath); }
+            catch (Exception ex) { Log(L("设置保存失败：", "Could not save preferences: ") + ex.Message); }
+        }
+
+        private void RememberSwitch(System.Net.IPAddress address)
+        {
+            if (!preferencesReady || IsDisposed) return;
+            BeginInvoke(new Action(() => { preferences.LastSwitchIp = address.ToString(); SavePreferences(); }));
+        }
+
+        private async System.Threading.Tasks.Task CheckForUpdates(bool automatic)
+        {
+            if (updateBusy) return;
+            updateBusy = true; checkUpdate.Enabled = false; UpdateSelectedAdapter();
+            try {
+                Log(L("正在检查 GitHub 正式版…", "Checking the latest stable GitHub release..."));
+                var release = await ReleaseUpdater.Latest();
+                if (IsDisposed) return;
+                if (ReleaseUpdater.NormalizeVersion(release.tag_name) <= GetType().Assembly.GetName().Version) {
+                    Log(L("当前已是最新版本。", "Already up to date.")); return;
+                }
+                if (_serverRunning) { Log(L("发现新版，请停止接收后再次检查并安装：", "Update found. Stop receiving, then check again to install: ") + release.tag_name); return; }
+                if (!automatic && MessageBox.Show(this,L("下载并校验更新后将重启应用。是否继续？", "Download, verify and restart the app to update?"),
+                    "Lite Link " + release.tag_name,MessageBoxButtons.YesNo,MessageBoxIcon.Question,MessageBoxDefaultButton.Button2) != DialogResult.Yes) return;
+                Log(L("正在下载并校验更新…", "Downloading and verifying the update..."));
+                string staged = await ReleaseUpdater.Stage(release);
+                if (IsDisposed) return;
+                SavePreferences();
+                ReleaseUpdater.LaunchInstaller(staged,Application.ExecutablePath);
+                exitingForUpdate = true; Application.Exit();
+            } catch (Exception ex) { if (!IsDisposed) Log(L("更新失败，当前版本未替换：", "Update failed; current files were not replaced: ") + ex.Message); }
+            finally { if (!IsDisposed) { updateBusy = false; checkUpdate.Enabled = true; UpdateSelectedAdapter(); } }
         }
 
         private void RefreshNetworkAdapters()
@@ -99,8 +206,16 @@ namespace NXInput_Server
                         }
                     }
                 }
+                string rememberedId = previous?.Id ?? preferences.AdapterId;
+                string rememberedIp = previous?.Address.ToString() ?? preferences.Address;
+                if (adapterComboBox.SelectedIndex < 0 && !string.IsNullOrEmpty(rememberedId)) {
+                    var choices = adapterComboBox.Items.Cast<AdapterAddress>().Where(a => a.Id == rememberedId).ToArray();
+                    var choice = choices.FirstOrDefault(a => a.Address.ToString() == rememberedIp)
+                        ?? (choices.Length == 1 ? choices[0] : null);
+                    if (choice != null) adapterComboBox.SelectedItem = choice;
+                }
                 // Multiple interfaces require an explicit choice; do not guess a route.
-                if (adapterComboBox.SelectedIndex < 0 && adapterComboBox.Items.Count == 1)
+                if (adapterComboBox.SelectedIndex < 0 && adapterComboBox.Items.Count == 1 && string.IsNullOrEmpty(rememberedId))
                     adapterComboBox.SelectedIndex = 0;
             }
             catch (Exception ex)
@@ -118,7 +233,8 @@ namespace NXInput_Server
                 : L("Switch 中填写此 IP：","Enter this IP on the Switch: ") + adapter.Address + L("    UDP：8192 / 自动发现：8193\n","    UDP: 8192 / Discovery: 8193\n")
                     + L("子网掩码：","Subnet mask: ") + adapter.Mask + L("    网关：","    Gateway: ") + (string.IsNullOrEmpty(adapter.Gateways) ? L("无","None") : adapter.Gateways)
                     + L("\n请与 Switch 网络设置对照；网关不同不一定不通，跨子网需要路由可达。","\nCompare with the Switch network. Different subnets require a reachable route.");
-            button1.Enabled = _serverRunning || adapter != null;
+            button1.Enabled = _serverRunning || (!updateBusy && adapter != null);
+            if (adapter != null) SavePreferences();
         }
 
         private UdpClient CreateSelectedListener()
@@ -174,7 +290,9 @@ namespace NXInput_Server
 
         private void StartServer()
         {
-            if (_serverRunning) return;
+            if (_serverRunning || updateBusy) return;
+            startupRetry.Stop();
+            SavePreferences();
 
             try
             {
@@ -275,6 +393,7 @@ namespace NXInput_Server
                             udpSocket.Send(Encoding.ASCII.GetBytes("xbox\0"), Encoding.ASCII.GetBytes("xbox\0").Length, sender);
                             clientEndPoint = (IPEndPoint)sender;
                             switchConnected = true;
+                            RememberSwitch(clientEndPoint.Address);
                             Log(L("已连接：", "Connected to: ") + clientEndPoint.Address);
                             break;
                         }
