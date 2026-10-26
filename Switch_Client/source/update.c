@@ -44,6 +44,9 @@ bool switchUpdateInstall(const ReleaseInfo *release,const char *selfPath,UpdateP
     const char *allowed="https://github.com/yukinsnow/Lite-Link/releases/download/";
     size_t pathLength=strlen(selfPath);
     if(strncmp(selfPath,"sdmc:/",6) || pathLength<10 || pathLength>900 || strcmp(selfPath+pathLength-4,".nro")) {snprintf(error,errorSize,"Cannot identify the running NRO path");return false;}
+    FILE *current=fopen(selfPath,"rb");char currentMagic[4]={0};
+    if(current) {if(!fseek(current,16,SEEK_SET)) fread(currentMagic,1,4,current);fclose(current);}
+    if(memcmp(currentMagic,"NRO0",4)) {snprintf(error,errorSize,"Current NRO missing or invalid; backup kept");return false;}
     if(strncmp(release->assetUrl,allowed,strlen(allowed)) || strncmp(release->hashUrl,allowed,strlen(allowed))) {snprintf(error,errorSize,"Release has no supported NRO/checksum assets");return false;}
     Download hashes={.limit=128*1024,.progress=progress,.user=user};
     Download nro={.limit=32*1024*1024,.progress=progress,.user=user};
@@ -62,7 +65,10 @@ bool switchUpdateInstall(const ReleaseInfo *release,const char *selfPath,UpdateP
     if(written!=nro.size || closed) {snprintf(error,errorSize,"SD write failed; current NRO unchanged");goto done;}
     remove(backup);
     if(rename(selfPath,backup)) {snprintf(error,errorSize,"Cannot back up the current NRO");goto done;}
-    if(rename(temporary,selfPath)) {rename(backup,selfPath);snprintf(error,errorSize,"Install failed; restoring backup");goto done;}
+    if(rename(temporary,selfPath)) {
+        int restored=rename(backup,selfPath);
+        snprintf(error,errorSize,restored?"Install failed. Restore .nro.bak manually":"Install failed; previous NRO restored");goto done;
+    }
     success=true;
 done:free(hashes.data);free(nro.data);return success;
 }

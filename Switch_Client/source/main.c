@@ -221,7 +221,7 @@ static void performUpdate(bool automatic) {
 failed:
     ui.busy=false;
     if(updateCancelled) note(tr("更新已取消，当前版本保留。","Update cancelled. Current version kept."));
-    else snprintf(ui.note,sizeof(ui.note),tr("更新失败（保留当前版本）：%s","Update failed (current version kept): %s"),error);
+    else snprintf(ui.note,sizeof(ui.note),tr("更新失败：%s","Update failed: %s"),error);
 }
 static void action(int which) {
     if(ui.busy) return;

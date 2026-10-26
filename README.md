@@ -12,7 +12,7 @@ Maintained by [GitHub @Yukinsnow](https://github.com/Yukinsnow). Based on [Vins9
 
 | Platform | Output | Status |
 | --- | --- | --- |
-| Switch / Switch Lite | Wi-Fi input sender | Tested on the user's Switch Lite; v0.2 localization/icon updates need device verification |
+| Switch / Switch Lite | Wi-Fi input sender | Core UI/network tested on the user's Lite; v0.3 startup/updater need device verification |
 | Windows | Virtual Xbox 360 controller through ViGEmBus | Working; adapter selection, reconnect and UDP tests pass |
 | macOS 15+ | Native CoreHID virtual gamepad | **Experimental; requires an Apple-approved virtual HID entitlement and matching signing profile. Not a ready-to-use controller on an ordinary unsigned build.** |
 
