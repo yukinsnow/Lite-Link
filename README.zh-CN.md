@@ -31,6 +31,8 @@ macOS 不会使用键盘/鼠标映射替代手柄。Apple 限制 `com.apple.deve
 
 ## Windows 快速使用
 
+从 [Releases](https://github.com/yukinsnow/Lite-Link/releases) 下载；Windows、Switch 分开打包，macOS 包明确标为实验性。
+
 1. 安装 [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases/tag/v1.22.0) 和 .NET Framework 4.8；已能正常测试的电脑无需重装。ViGEmBus 已归档。
 2. 保持 Windows 接收端的 `.exe`、`.dll`、`.config` 文件在同一文件夹。
 3. 运行 `NXInput Server.exe`，选择与 Switch 通信的 IPv4 网卡，启动服务。

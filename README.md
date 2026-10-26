@@ -33,6 +33,8 @@ The macOS backend creates a real generic HID gamepad, never keyboard/mouse event
 
 ## Windows quick start
 
+Download the packages from [Releases](https://github.com/yukinsnow/Lite-Link/releases). Windows and Switch packages are separate; the macOS archive is explicitly experimental.
+
 1. Install [ViGEmBus](https://github.com/nefarius/ViGEmBus/releases/tag/v1.22.0) if it is not already installed. It is an archived dependency; .NET Framework 4.8 is also required.
 2. Extract the Windows receiver and keep its `.exe`, `.dll` and `.config` files together.
 3. Run `NXInput Server.exe`, select the IPv4 adapter reachable from the Switch, then start the server.

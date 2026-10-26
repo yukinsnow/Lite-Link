@@ -20,15 +20,17 @@ jobs:
           $compiler = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -find 'MSBuild\**\Roslyn\csc.exe' | Select-Object -First 1
           if (!$compiler) { throw 'Roslyn compiler unavailable' }
           $facade = "${env:ProgramFiles(x86)}/Reference Assemblies/Microsoft/Framework/.NETFramework/v4.8/Facades/netstandard.dll"
-          & $compiler /nologo /target:exe "/out:$dir/ProtocolSmoke.exe" "/reference:$dir/NXInput Server.exe" "/reference:$dir/Nefarius.ViGEm.Client.dll" /reference:System.Windows.Forms.dll "/reference:$facade" validation/ProtocolSmoke.cs
-          if ($LASTEXITCODE) { throw 'Test build failed' }
-          & "$dir/ProtocolSmoke.exe"
-          if ($LASTEXITCODE) { throw 'Protocol tests failed' }
+          foreach ($testName in 'ProtocolSmoke','LanguageSmoke') {
+            & $compiler /nologo /target:exe "/out:$dir/$testName.exe" "/reference:$dir/NXInput Server.exe" "/reference:$dir/Nefarius.ViGEm.Client.dll" /reference:System.Windows.Forms.dll "/reference:$facade" "validation/$testName.cs"
+            if ($LASTEXITCODE) { throw 'Test build failed' }
+            & "$dir/$testName.exe"
+            if ($LASTEXITCODE) { throw 'Tests failed' }
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: Lite-Link-Windows
           path: |
-            Windows_Server/NXInput Server/bin/Release/*.exe
+            Windows_Server/NXInput Server/bin/Release/NXInput Server.exe
             Windows_Server/NXInput Server/bin/Release/*.dll
             Windows_Server/NXInput Server/bin/Release/*.config
   switch:
